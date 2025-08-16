@@ -30,7 +30,17 @@ git clone <your-repo-url>
 cd brainrot-mcp
 ```
 
-### 2. Configure Claude Desktop
+### 2. Configure Claude Code MCP (Recommended)
+
+For Claude Code users, use the built-in MCP management:
+
+```bash
+claude mcp add brainrot -- uv --directory /Users/ben/Intrafocal/Python/brainrot-mcp/mcp_server run python server.py
+```
+
+**Important:** Replace `/Users/ben/Intrafocal/Python/brainrot-mcp` with your actual project path.
+
+### 2. Alternative: Configure Claude Desktop Manually
 
 Add the MCP server to your Claude Desktop configuration:
 
