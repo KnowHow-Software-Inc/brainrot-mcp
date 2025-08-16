@@ -33,8 +33,8 @@ def start_backend():
     
     # Check if backend is already running
     try:
-        async with httpx.AsyncClient() as client:
-            response = client.get(f"{BACKEND_URL}/health", timeout=2.0)
+        with httpx.Client() as client:
+            response = client.get(f"{BACKEND_URL}/", timeout=2.0)
             if response.status_code == 200:
                 print(f"✅ Backend already running at {BACKEND_URL}")
                 return
@@ -63,7 +63,7 @@ def start_backend():
         try:
             import httpx
             with httpx.Client() as client:
-                response = client.get(f"{BACKEND_URL}/health", timeout=5.0)
+                response = client.get(f"{BACKEND_URL}/", timeout=5.0)
                 if response.status_code == 200:
                     print(f"✅ Backend started successfully at {BACKEND_URL}")
                 else:
@@ -112,7 +112,7 @@ def summarize_content(content: str, max_length: int = 500) -> str:
 async def push_context(
     key: str,
     content: str,
-    tags: Any = None,
+    tags: Optional[Union[List[str], str]] = None,
     priority: str = "medium"
 ) -> Dict[str, Any]:
     """
