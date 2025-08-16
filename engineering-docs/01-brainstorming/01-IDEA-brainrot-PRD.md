@@ -8,53 +8,92 @@ Developers using AI coding agents lose valuable project context between sessions
 ### Core Value Proposition
 An MCP server that seamlessly captures, stores, and retrieves project context within AI coding sessions, enabling persistent knowledge and architecture consistency.
 
-### MVP User Flows
+## Goal: Our Killer Demos
 
-#### Flow 1: Context Persistence
-1. Developer works on feature, encounters complex business logic
-2. Saves context: `store_context("user-auth", "Users can have multiple roles, admin overrides...", type="decision")`
-3. Next session: `get_context("user-auth")` returns saved context
-4. AI agent has full context without re-explanation
+### The Killer Combo Demo
+"Watch me save architecture decisions and TODOs in Claude Code, switch to VS Code to continue work with full context, then validate my changes against the original architecture - all without losing any project knowledge."
 
-#### Flow 2: Architecture Validation
-1. Developer saves code snippet: `store_context("repo-pattern", code_snippet, type="code")`
-2. Later: `validate_against_context(new_code, "repo-pattern")` 
-3. AI compares new code to stored patterns and returns compliance feedback
+This hits Demos 1, 2, and sets up for 3. Achievable in 5 hours.
 
-### MVP Features (Phase 1 - CRUD)
-- `store_context(key, content, type)` - Save project knowledge (code/decisions/requirements)
-- `get_context(key)` - Retrieve stored context  
-- `list_contexts()` - Show all stored items
-- `delete_context(key)` - Remove stored context
+### Demo 1: Cross-IDE Context Sharing (Phase 1)
+**Scenario:** Developer saves context in Claude Code, retrieves in VS Code
+1. Store architecture decision: `store_context("auth-pattern", "Use JWT with refresh tokens", tags=["architecture"])`
+2. Switch to VS Code with different AI assistant
+3. Retrieve context: `get_context("auth-pattern")` 
+4. Continue development with full context preserved
 
-### MVP Features (Phase 2 - AI Validation)
-- `validate_against_context(content, reference_key)` - AI-powered comparison
-- `get_all_relevant_context(query)` - AI-powered context search
+### Demo 2: Long-Running Project Management (Phase 1)
+**Scenario:** Managing TODOs and technical debt across sessions
+1. Store project goals: `store_context("sprint-goals", "Complete user auth flow", tags=["goals"])`
+2. Track tech debt: `store_context("tech-debt-auth", "Refactor token validation", tags=["tech-debt"])`
+3. New session days later: `list_contexts(filter_by_tag="tech-debt")`
+4. Retrieve and address accumulated items systematically
 
+### Demo 3: Cross-Model Collaboration (Phase 2)
+**Scenario:** Architecture validation across different AI models
+1. Store pattern in Claude: `store_context("repo-pattern", code_snippet, tags=["pattern"])`
+2. Export for review: `export_context("repo-pattern", format="standard")`
+3. Import in GPT/Gemini session for alternative perspective
+4. Store feedback: `store_context("repo-pattern-review", feedback)`
+5. Retrieve combined insights in original Claude session 
+
+### Demo Implied Requirements Analysis
+
+**Demo 1 (Push/Pop)** - Simplest foundation
+- Basic store/retrieve
+- Cross-IDE context sharing
+- Core CRUD only
+
+**Demo 2 (Preset Context)** - Builds on Demo 1
+- Same CRUD + categorization (goals, todos, tech debt)
+- Enables long-running project management
+- Still just storage/retrieval
+
+**Demo 3 (Cross-Model)** - Adds interoperability
+- CRUD + cross-platform context format
+- Enables multi-AI collaboration
+- Requires standardized context structure
+
+**Demo 4 (Async)** - Most complex
+- Everything above + async processing
+- Background AI analysis
+- Result storage
+
+### Recommended Feature Prioritization
+
+**Phase 1 Core (Hour 1-2)** - Enables Demos 1 & 2
+- `store_context(key, content, metadata)` with tags/categories
+- `get_context(key)` 
+- `list_contexts(filter_by_tag)`
+- Flat key-value with metadata tags
+
+**Phase 2 Enhancement (Hour 3)** - Enables Demo 3
+- Standardized context format (JSON with type, content, metadata)
+- `export_context(key, format)` for cross-platform
+- `import_context(data)`
+
+**Phase 3 Stretch (Hour 4-5)** - Partially enables Demo 4
+- `queue_for_analysis(key)` 
+- `get_analysis_results(key)`
+- Simple async flag, not full background processing
 ### Success Criteria
 - Store & retrieve context in under 2 seconds
 - Support code snippets, decisions, requirements
 - AI validation provides actionable feedback
 - Works seamlessly in Claude Code session
-
-### Development Approach
-- Phase 1: Focus on CRUD operations and basic I/O
-- Phase 2: Add AI-powered validation using Anthropic API keys
-- Target: 5-hour hackathon timeline with core value loop delivery
-
-
 # Questions
 
 ## Key Clarifications Needed
 
-### 1. Demo Scenario
-What's the ONE killer demo you want to show judges? Like "Watch me save architecture decisions in session 1, then in session 2 the AI automatically knows them" - what's YOUR version?
 
 ### 2. Scope Ruthlessness
 For the 5-hour MVP, should we:
 - Skip delete_context() to save time?
 - Focus on just ONE content type (e.g., just architecture decisions)?
 - Hard-code certain things (like context expiry)?
+
+#### Answer
+HOLD
 
 ### 3. Context Organization
 - Flat key-value store OR hierarchical (project > module > context)?
@@ -74,31 +113,5 @@ What should we explicitly NOT do? (e.g., no UI, no auth, no multi-user collabora
 How do you envision using this in Claude Code? Through explicit commands or should it auto-capture certain things?
 
 
-# Killer Demo
-## Demo Idea 1 - push and pop
-1. Send context to brainrot
-2. Retrieve context on another IDE and continue working
 
-## Demo Idea 2 - preset context
-1. Store context about a project goal (example: build frontend, todos)
-2. Retrieve it later in order to:
-	1. Build long running plans
-	2. Manage tech debt
-	3. Onboard new developers
-
-## Demo Idea 3 - claude code to claude desktop
-1. Send context about architecture or ideas to brainrot
-2. Retrieve context for assessment, review, validation, challenge in another model (gpt 5, gemini, etc etc)
-3. Send report back to brainrot
-4. Retrieve report in original claude code session
-
-## Demo Idea 4 - async validation and research
-1. Send context about architecture, issues, code, plans etc to brainrot
-2. AI works on it async
-3. Brainrot documents results
-4. Retrieve results later
-
-
-## Implied technical requirements
-1. Semantic tagging
-2. I/O 
+# 

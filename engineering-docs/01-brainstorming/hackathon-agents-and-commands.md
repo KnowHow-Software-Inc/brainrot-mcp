@@ -1,4 +1,4 @@
-# Hackathon Agents and Commands for KnowHow MCP
+# Hackathon Agents and Commands for BrainRot MCP
 
 ## Core Hackathon Slash Commands
 
