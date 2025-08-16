@@ -112,7 +112,7 @@ def summarize_content(content: str, max_length: int = 500) -> str:
 async def push_context(
     key: str,
     content: str,
-    tags: Optional[Union[List[str], str]] = None,
+    tags: Optional[List[str]] = None,
     priority: str = "medium"
 ) -> Dict[str, Any]:
     """
@@ -124,7 +124,7 @@ async def push_context(
     Args:
         key: Unique identifier for this context (e.g., "auth-pattern", "todo-refactor-api")
         content: The full context to store
-        tags: Tags for categorization - can be array ["architecture", "security"] or string "architecture,security"
+        tags: List of tags for categorization (e.g., ["architecture", "security"])
         priority: Priority level (low, medium, high) - useful for TODOs and tech debt
     
     Returns:
@@ -138,15 +138,41 @@ async def push_context(
         # Create a summary of the content
         summary = summarize_content(content, max_length=200)
         
-        # Parse tags - handle both array and string inputs
+        # Process tags - handle potential JSON string from MCP framework
         parsed_tags = []
+        
+        # Debug logging to file
+        import os
+        debug_path = "/tmp/mcp_tags_debug.log"
+        with open(debug_path, "a") as f:
+            f.write(f"\n--- New Request ---\n")
+            f.write(f"tags type: {type(tags)}\n")
+            f.write(f"tags value: {repr(tags)}\n")
+            f.write(f"tags is str: {isinstance(tags, str)}\n")
+            f.write(f"tags is list: {isinstance(tags, list)}\n")
+        
         if tags:
-            if isinstance(tags, list):
-                # If it's already a list, use it directly
+            # Check if tags is actually a string (MCP framework issue)
+            if isinstance(tags, str):
+                # It's a JSON-encoded string, parse it
+                if tags.strip().startswith('[') and tags.strip().endswith(']'):
+                    try:
+                        import json
+                        parsed_tags = json.loads(tags)
+                        parsed_tags = [str(tag).strip() for tag in parsed_tags if str(tag).strip()]
+                    except json.JSONDecodeError:
+                        # Fallback: treat as single tag
+                        parsed_tags = [tags.strip()] if tags.strip() else []
+                else:
+                    # Single tag as string
+                    parsed_tags = [tags.strip()] if tags.strip() else []
+            elif isinstance(tags, list):
+                # Proper list received
                 parsed_tags = [str(tag).strip() for tag in tags if str(tag).strip()]
-            elif isinstance(tags, str) and tags.strip():
-                # If it's a string, split by comma
-                parsed_tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+        
+        # Log the parsed result
+        with open(debug_path, "a") as f:
+            f.write(f"parsed_tags: {repr(parsed_tags)}\n")
         
         # Prepare the context data
         context_data = {

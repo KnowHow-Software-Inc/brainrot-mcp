@@ -124,7 +124,7 @@ async def push_context(
     Args:
         key: Unique identifier for this context (e.g., "auth-pattern", "todo-refactor-api")
         content: The full context to store
-        tags: Tags for categorization - can be array ["architecture", "security"] or string "architecture,security"
+        tags: List of tags for categorization (e.g., ["architecture", "security"])
         priority: Priority level (low, medium, high) - useful for TODOs and tech debt
     
     Returns:
@@ -140,13 +140,33 @@ async def push_context(
         
         # Parse tags - handle both array and string inputs
         parsed_tags = []
+        
+        # Debug logging
+        with open("/tmp/brainrot_debug.log", "a") as f:
+            f.write(f"tags type: {type(tags)}, value: {repr(tags)}\n")
+        
         if tags:
             if isinstance(tags, list):
                 # If it's already a list, use it directly
                 parsed_tags = [str(tag).strip() for tag in tags if str(tag).strip()]
             elif isinstance(tags, str) and tags.strip():
-                # If it's a string, split by comma
-                parsed_tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+                # Check if it's a JSON-encoded array string
+                if tags.strip().startswith('[') and tags.strip().endswith(']'):
+                    try:
+                        import json
+                        parsed_tags = json.loads(tags)
+                        # Ensure all items are strings
+                        parsed_tags = [str(tag).strip() for tag in parsed_tags if str(tag).strip()]
+                    except json.JSONDecodeError:
+                        # If JSON parsing fails, treat as comma-separated
+                        parsed_tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+                else:
+                    # If it's a regular string, split by comma
+                    parsed_tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+        
+        # Debug logging result
+        with open("/tmp/brainrot_debug.log", "a") as f:
+            f.write(f"parsed_tags: {repr(parsed_tags)}\n\n")
         
         # Prepare the context data
         context_data = {
