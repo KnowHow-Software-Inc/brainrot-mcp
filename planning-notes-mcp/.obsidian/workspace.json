@@ -1,0 +1,186 @@
+{
+  "main": {
+    "id": "39d3b3d946a85149",
+    "type": "split",
+    "children": [
+      {
+        "id": "dbc92fba093663eb",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "bdd2fd28c630cf10",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "02-plans/hour-2-backend-api.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "hour-2-backend-api"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "6da1ff0772ae9856",
+    "type": "split",
+    "children": [
+      {
+        "id": "610e349ed8383ffc",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "6e02aa5266678fe2",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "2b6d0629b3f66366",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "e9615ad0c39790a7",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "1a2dc38e4de1291b",
+    "type": "split",
+    "children": [
+      {
+        "id": "c020d10ec56a3a13",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "047d910d86dacabb",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "02-plans/hour-2-backend-api.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for hour-2-backend-api"
+            }
+          },
+          {
+            "id": "068177db853849f1",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "02-plans/hour-2-backend-api.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from hour-2-backend-api"
+            }
+          },
+          {
+            "id": "0e2d6fea9eba1a7f",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "61716596eaa21023",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "02-plans/hour-2-backend-api.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of hour-2-backend-api"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false
+    }
+  },
+  "active": "bdd2fd28c630cf10",
+  "lastOpenFiles": [
+    "02-plans/hour-1-foundation.md",
+    "01-brainstorming/hackathon-agents-and-commands.md",
+    "01-brainstorming/PRD-and-Plan.md",
+    "02-plans/hour-8-final-testing.md",
+    "02-plans/hour-7-polish-demo.md",
+    "02-plans/hour-6-integration-testing.md",
+    "02-plans/hour-5-dashboard.md",
+    "02-plans/hour-4-mcp-tools.md",
+    "02-plans/hour-3-mcp-core.md",
+    "02-plans/hour-2-backend-api.md",
+    "00-north-star/architecture-and-vision.md",
+    "00-north-star"
+  ]
+}
