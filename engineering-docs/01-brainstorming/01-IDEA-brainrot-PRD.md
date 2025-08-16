@@ -8,7 +8,7 @@ Developers using AI coding agents lose valuable project context between sessions
 ### Core Value Proposition
 An MCP server that seamlessly captures, stores, and retrieves project context within AI coding sessions, enabling persistent knowledge and architecture consistency.
 
-## Goal: Our Killer Demos
+## Goal: Our Killer Demos - Key User Flows
 
 ### The Killer Combo Demo
 "Watch me save architecture decisions and TODOs in Claude Code, switch to VS Code to continue work with full context, then validate my changes against the original architecture - all without losing any project knowledge."
@@ -81,37 +81,64 @@ This hits Demos 1, 2, and sets up for 3. Achievable in 5 hours.
 - Support code snippets, decisions, requirements
 - AI validation provides actionable feedback
 - Works seamlessly in Claude Code session
-# Questions
 
-## Key Clarifications Needed
+## Technical Specifications & Approach
+
+### Core Architecture Decisions
+
+**Storage System**
+- SQLite database for persistence
+- Location: `~/.brainrot/brainrot.db`
+- Schema optimized for fast key-value retrieval with metadata filtering
+
+**Context Organization**
+- Flat key-value store (no hierarchical nesting)
+- Project-based isolation using current working directory as project ID
+- Keys are simple strings: `auth-pattern`, `sprint-goals`, etc.
+- Overwrite on duplicate keys (no version history for MVP)
+
+**Project Detection**
+- Use current working directory name as project identifier
+- Example: `/Users/dev/myapp/` → project = "myapp"
+- Contexts are scoped to projects automatically
+
+**Data Model**
+
+```json
+// Note: this is an example of how a user would use this, not the actual system architecture.
+{
+  "key": "auth-pattern",
+  "content": "Use JWT with refresh tokens", 
+  "project": "myapp",
+  "tags": ["architecture", "auth"],
+  "created_at": "2024-01-01T10:00:00Z",
+  "updated_at": "2024-01-01T10:00:00Z"
+}
+```
+
+### MCP Integration
+- Expose tools via MCP server
+- Explicit command invocation only (no auto-capture)
+- Tools available in any MCP-compatible client (Claude Code, VS Code, etc.)
+
+### Phase 1 Core Tools (Hour 1-2)
+- `store_context(key, content, tags)` - Save with optional tags
+- `get_context(key)` - Retrieve by exact key
+- `list_contexts(filter_by_tag)` - List all or filter by tag
+- All operations scoped to current project
+
+### Phase 2 Tools (Hour 3)
+- `export_context(key, format)` - Export for cross-platform use
+- `import_context(data)` - Import from other systems
+- Standardized JSON format for interoperability
+
+### Non-Goals (Explicit Exclusions)
+- No authentication or user management
+- No multi-user collaboration
+- No UI (stretch goal only if ahead of schedule)
+- No delete functionality (save time)
+- No version history
+- No context expiry
+- No auto-capture or intelligent detection
 
 
-### 2. Scope Ruthlessness
-For the 5-hour MVP, should we:
-- Skip delete_context() to save time?
-- Focus on just ONE content type (e.g., just architecture decisions)?
-- Hard-code certain things (like context expiry)?
-
-#### Answer
-HOLD
-
-### 3. Context Organization
-- Flat key-value store OR hierarchical (project > module > context)?
-- Single namespace per user OR project-based isolation?
-- Overwrite on duplicate keys OR version history?
-
-### 4. Success Metric
-What's the ONE thing that MUST work for you to feel successful?
-- "I can store and retrieve context" OR
-- "I can validate code against stored patterns" OR
-- Something else?
-
-### 5. Non-goals
-What should we explicitly NOT do? (e.g., no UI, no auth, no multi-user collaboration)
-
-### 6. Integration Point
-How do you envision using this in Claude Code? Through explicit commands or should it auto-capture certain things?
-
-
-
-# 
