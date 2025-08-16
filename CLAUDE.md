@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-KnowHow MCP is a Model Context Protocol server that bridges AI coding sessions with human expertise. It allows developers to seamlessly request help from other developers without leaving their AI-assisted coding flow.
+Brainrot MCP is a Model Context Protocol server that bridges AI coding sessions with human expertise. It allows developers to seamlessly request help from other developers without leaving their AI-assisted coding flow.
 
 ## Architecture
 
@@ -25,13 +25,15 @@ Since this is a hackathon project in active development, key commands will be:
 ```bash
 # Backend API
 cd backend
-pip install -r requirements.txt
-python server.py  # Runs on port 8000
+uv venv
+uv pip install -r requirements.txt
+uv run python server.py  # Runs on port 8000
 
 # MCP Server
 cd mcp_server
-pip install -r requirements.txt
-python server.py  # For MCP Inspector testing
+uv venv
+uv pip install -r requirements.txt
+uv run python server.py  # For MCP Inspector testing
 
 # Test MCP Server
 npx @modelcontextprotocol/inspector python mcp_server/server.py
@@ -51,7 +53,7 @@ The server exposes four main tools:
 
 ## Key Implementation Details
 
-- **Database**: SQLite file at `data/knowhow.db` (auto-created on first run)
+- **Database**: SQLite file at `data/brainrot.db` (auto-created on first run)
 - **API Base URL**: Backend runs on `http://localhost:8000`
 - **Security**: Context sanitization removes secrets/tokens before posting
 - **Demo Mode**: Pre-seeded data for hackathon demonstration
