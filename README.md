@@ -31,6 +31,11 @@ uv pip install -r mcp_server/requirements.txt
 ```bash
 python backend/server.py
 ```
+
+To run with vector search enabled, set ENABLE_VECTOR_SEARCH=true
+```bash
+ENABLE_VECTOR_SEARCH=true uv run python server.py
+```
 The API server will start on `http://localhost:8000`
 
 ### 3. Configure Claude Desktop
@@ -95,6 +100,8 @@ list_contexts(tag="performance")
 - **Smart instructions**: Retrieved contexts include contextual guidance based on tags
 - **Priority levels**: Mark TODOs and technical debt with priority (low/medium/high)
 - **Metadata support**: Rich context information with timestamps and source tracking
+- **Vector Search**: Semantic search to find related contexts even without exact keywords
+- **Robust Tag Support**: Reliable tag filtering and categorization for better organization
 
 ## 🏗️ Architecture
 

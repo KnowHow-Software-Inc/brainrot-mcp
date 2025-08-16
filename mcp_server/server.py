@@ -124,15 +124,17 @@ async def push_context(
     Args:
         key: Unique identifier for this context (e.g., "auth-pattern", "todo-refactor-api")
         content: The full context to store
-        tags: Tags for categorization - can be array ["architecture", "security"] or string "architecture,security"
+        tags: Tags for categorization - ALWAYS include project name first, then categories
         priority: Priority level (low, medium, high) - useful for TODOs and tech debt
     
     Returns:
         Confirmation of storage with the key and summary
     
     Examples:
-        - push_context("auth-flow", "JWT with refresh tokens...", ["security", "architecture"])
-        - push_context("todo-validation", "Add input validation to user endpoints", ["todo", "backend"])
+        - push_context("auth-flow", "JWT with refresh tokens...", ["my-app", "security", "architecture"])
+        - push_context("todo-validation", "Add input validation to user endpoints", ["my-app", "todo", "backend"])
+    
+    IMPORTANT: Always include your project name as the first tag to enable filtering by project.
     """
     try:
         # Create a summary of the content
@@ -140,13 +142,33 @@ async def push_context(
         
         # Parse tags - handle both array and string inputs
         parsed_tags = []
+        
+        # Debug logging
+        with open("/tmp/brainrot_debug.log", "a") as f:
+            f.write(f"tags type: {type(tags)}, value: {repr(tags)}\n")
+        
         if tags:
             if isinstance(tags, list):
                 # If it's already a list, use it directly
                 parsed_tags = [str(tag).strip() for tag in tags if str(tag).strip()]
             elif isinstance(tags, str) and tags.strip():
-                # If it's a string, split by comma
-                parsed_tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+                # Check if it's a JSON-encoded array string
+                if tags.strip().startswith('[') and tags.strip().endswith(']'):
+                    try:
+                        import json
+                        parsed_tags = json.loads(tags)
+                        # Ensure all items are strings
+                        parsed_tags = [str(tag).strip() for tag in parsed_tags if str(tag).strip()]
+                    except json.JSONDecodeError:
+                        # If JSON parsing fails, treat as comma-separated
+                        parsed_tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+                else:
+                    # If it's a regular string, split by comma
+                    parsed_tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+        
+        # Debug logging result
+        with open("/tmp/brainrot_debug.log", "a") as f:
+            f.write(f"parsed_tags: {repr(parsed_tags)}\n\n")
         
         # Prepare the context data
         context_data = {
@@ -336,93 +358,6 @@ async def list_contexts(
         return {
             "success": False,
             "error": f"Unexpected error: {str(e)}"
-        }
-
-
-@mcp.tool()
-async def search_contexts(
-    query: str,
-    limit: int = 10,
-    threshold: float = 0.5
-) -> Dict[str, Any]:
-    """
-    Search contexts using semantic similarity.
-    
-    This tool uses vector embeddings to find contexts that are semantically similar
-    to your query, even if they don't contain the exact keywords.
-    
-    Args:
-        query: What you're looking for (e.g., "authentication patterns", "database setup")
-        limit: Maximum number of results to return (default: 10)
-        threshold: Minimum similarity score (0.0-1.0, default: 0.5)
-    
-    Returns:
-        List of contexts ranked by semantic similarity with similarity scores
-    
-    Examples:
-        - search_contexts("JWT authentication")  # Find auth-related contexts
-        - search_contexts("error handling patterns", limit=5)  # Find error handling approaches
-        - search_contexts("database configuration", threshold=0.7)  # High-confidence matches only
-    """
-    try:
-        if not query.strip():
-            return {
-                "success": False,
-                "error": "Query cannot be empty"
-            }
-        
-        async with httpx.AsyncClient() as client:
-            params = {
-                "query": query.strip(),
-                "limit": limit,
-                "threshold": threshold
-            }
-            
-            response = await client.get(
-                f"{BACKEND_URL}/api/contexts/search/semantic",
-                params=params,
-                timeout=15.0
-            )
-            response.raise_for_status()
-            
-            contexts = response.json()
-            
-            # Format for display
-            formatted_contexts = []
-            for ctx in contexts:
-                similarity_score = ctx.get("context_metadata", {}).get("similarity_score", 0)
-                formatted_contexts.append({
-                    "key": ctx["key"],
-                    "content": ctx["content"],
-                    "summary": ctx.get("summary"),
-                    "tags": ctx.get("tags", []),
-                    "priority": ctx.get("context_metadata", {}).get("priority") if ctx.get("context_metadata") else None,
-                    "similarity_score": round(similarity_score, 3),
-                    "updated_at": ctx.get("updated_at")
-                })
-            
-            return {
-                "success": True,
-                "query": query,
-                "count": len(formatted_contexts),
-                "contexts": formatted_contexts,
-                "search_params": {
-                    "limit": limit,
-                    "threshold": threshold
-                }
-            }
-            
-    except httpx.HTTPError as e:
-        return {
-            "success": False,
-            "error": f"Failed to search contexts: {str(e)}",
-            "query": query
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"Unexpected error: {str(e)}",
-            "query": query
         }
 
 
@@ -733,7 +668,6 @@ async def context_for_feature(feature_name: str) -> str:
             for ctx in relevant_contexts:
                 summary = ctx.get("summary", ctx["content"][:100] + "...")
                 response_lines.append(f"- **{ctx['key']}**: {summary}")
-                response_lines.append(f"  Tags: {', '.join(ctx.get('tags', []))}")
             response_lines.append("")
         
         # Always show architecture and security contexts
@@ -856,16 +790,21 @@ Search your codebase for:
    - Security considerations from research
    - Configuration examples
    - Testing approaches
-4. Store with tags: ["authentication", "security", "jwt", "architecture"]
+4. Store with tags: ["my-app", "authentication", "security", "jwt", "architecture"]
 
 ### Example 2: Database Schema Design
 1. Read migration files and model code
 2. Research database best practices
 3. Document design decisions and rationale
 4. Include performance considerations
-5. Store with tags: ["database", "schema", "users", "architecture"]
+5. Store with tags: ["my-app", "database", "schema", "users", "architecture"]
 
 ## 🏷️ Effective Tagging Strategy
+
+### Project Identification (REQUIRED)
+- **ALWAYS include your project name** as the first tag
+- Examples: `brainrot-mcp`, `my-blog`, `ecommerce-api`, `mobile-app`
+- This enables filtering contexts by project when working on multiple codebases
 
 ### Primary Categories
 - `architecture` - High-level design decisions
@@ -916,6 +855,11 @@ Search your codebase for:
    - Link to complementary patterns
 
 ## 🔍 Finding Context Later
+
+### Project-Specific Retrieval
+- Filter by project: list_contexts(tag="my-app")
+- Project authentication contexts: list_contexts(tag="my-app") + filter by "authentication"
+- All project TODOs: list_contexts(tag="my-app") + filter by "todo"
 
 ### Quick Retrieval
 - Get specific context: pop_context("user-auth-jwt-pattern")
@@ -1053,7 +997,8 @@ nvm use 18  # Or whatever version specified in .nvmrc
 ## Environment Configuration
 
 ### Required Environment Variables
-- DATABASE_URL: Connection string for main database
+- DATABASE_URL: Connection string for 
+database
 - REDIS_URL: Redis connection for caching
 - API_KEY: Third-party service API key
 - DEBUG: Set to 'true' for development
@@ -1174,7 +1119,7 @@ cp .env.example .env
 ### Example 1: Django Web Application
 ```
 Key: "django-project-setup"
-Tags: ["setup", "django", "python", "environment", "database"]
+Tags: ["my-blog", "setup", "django", "python", "environment", "database"]
 Priority: "high"
 
 Content should include:
@@ -1191,7 +1136,7 @@ Content should include:
 ### Example 2: React + Node.js Full Stack
 ```
 Key: "fullstack-dev-environment"
-Tags: ["setup", "react", "nodejs", "fullstack", "environment"]
+Tags: ["ecommerce-app", "setup", "react", "nodejs", "fullstack", "environment"]
 Priority: "high"
 
 Content should include:
@@ -1207,7 +1152,7 @@ Content should include:
 ### Example 3: Microservices with Docker
 ```
 Key: "microservices-docker-setup"
-Tags: ["setup", "docker", "microservices", "environment"]
+Tags: ["payment-service", "setup", "docker", "microservices", "environment"]
 Priority: "high"
 
 Content should include:
@@ -1263,7 +1208,7 @@ Content should include:
 await push_context(
     key="project-setup-complete",
     content=setup_instructions,
-    tags=["setup", "environment", "dependencies", "onboarding"],
+    tags=["my-project", "setup", "environment", "dependencies", "onboarding"],
     priority="high"
 )
 ```
@@ -1273,8 +1218,11 @@ await push_context(
 # Get setup instructions
 setup = await pop_context("project-setup-complete")
 
-# Find all setup-related contexts
-setups = await list_contexts(tag="setup")
+# Find all setup contexts for this project
+setups = await list_contexts(tag="my-project")
+
+# Find setup contexts across all projects
+all_setups = await list_contexts(tag="setup")
 ```
 
 ---
