@@ -8,7 +8,7 @@ Developers using AI coding agents lose valuable project context between sessions
 ### Core Value Proposition
 An MCP server that seamlessly captures, stores, and retrieves project context within AI coding sessions, enabling persistent knowledge and architecture consistency.
 
-## Goal: Our Killer Demos
+## Goal: Our Killer Demos - Key User Flows
 
 ### The Killer Combo Demo
 "Watch me save architecture decisions and TODOs in Claude Code, switch to VS Code to continue work with full context, then validate my changes against the original architecture - all without losing any project knowledge."
@@ -103,7 +103,9 @@ This hits Demos 1, 2, and sets up for 3. Achievable in 5 hours.
 - Contexts are scoped to projects automatically
 
 **Data Model**
+
 ```json
+// Note: this is an example of how a user would use this, not the actual system architecture.
 {
   "key": "auth-pattern",
   "content": "Use JWT with refresh tokens", 
@@ -138,3 +140,5 @@ This hits Demos 1, 2, and sets up for 3. Achievable in 5 hours.
 - No version history
 - No context expiry
 - No auto-capture or intelligent detection
+
+
