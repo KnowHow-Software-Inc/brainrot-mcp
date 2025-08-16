@@ -666,8 +666,8 @@ async def context_for_feature(feature_name: str) -> str:
         if relevant_contexts:
             response_lines.append("## 🎯 Directly Relevant Contexts")
             for ctx in relevant_contexts:
-                response_lines.append(f"- **{ctx['key']}**: {ctx.get('summary', ctx['content'][:100] + '...')}")
-                response_lines.append(f"  Tags: {', '.join(ctx.get('tags', []))}")
+                summary = ctx.get("summary", ctx["content"][:100] + "...")
+                response_lines.append(f"- **{ctx['key']}**: {summary}")
             response_lines.append("")
         
         # Always show architecture and security contexts
@@ -675,14 +675,16 @@ async def context_for_feature(feature_name: str) -> str:
         if arch_contexts:
             response_lines.append("## 📐 Architecture Decisions to Consider")
             for ctx in arch_contexts[:3]:
-                response_lines.append(f"- **{ctx['key']}**: {ctx.get('summary', ctx['content'][:100] + '...')}")
+                summary = ctx.get("summary", ctx["content"][:100] + "...")
+                response_lines.append(f"- **{ctx['key']}**: {summary}")
             response_lines.append("")
         
         security_contexts = [ctx for ctx in contexts if "security" in ctx.get("tags", [])]
         if security_contexts:
             response_lines.append("## 🔒 Security Considerations")
             for ctx in security_contexts[:3]:
-                response_lines.append(f"- **{ctx['key']}**: {ctx.get('summary', ctx['content'][:100] + '...')}")
+                summary = ctx.get("summary", ctx["content"][:100] + "...")
+                response_lines.append(f"- **{ctx['key']}**: {summary}")
             response_lines.append("")
         
         if not relevant_contexts and not arch_contexts and not security_contexts:
@@ -995,7 +997,8 @@ nvm use 18  # Or whatever version specified in .nvmrc
 ## Environment Configuration
 
 ### Required Environment Variables
-- DATABASE_URL: Connection string for main database
+- DATABASE_URL: Connection string for 
+database
 - REDIS_URL: Redis connection for caching
 - API_KEY: Third-party service API key
 - DEBUG: Set to 'true' for development
