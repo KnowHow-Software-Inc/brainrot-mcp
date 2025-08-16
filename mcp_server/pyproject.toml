@@ -1,0 +1,21 @@
+[project]
+name = "brainrot-mcp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "ben-intrafocal", email = "ben@intrafocal.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=0.1.0",
+    "httpx>=0.24.0",
+    "python-dotenv>=1.0.0"
+]
+
+[project.scripts]
+brainrot-mcp = "brainrot_mcp:main"
+
+[build-system]
+requires = ["uv_build>=0.8.0,<0.9"]
+build-backend = "uv_build"
