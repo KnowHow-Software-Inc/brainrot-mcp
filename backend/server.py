@@ -54,6 +54,11 @@ async def push_context(
         existing.updated_at = datetime.utcnow()
         db.commit()
         db.refresh(existing)
+        
+        # Generate and store new embedding
+        embedding = existing.generate_embedding()
+        DatabaseManager.store_embedding(existing.id, embedding)
+        
         return existing
     else:
         # Create new context
@@ -67,6 +72,11 @@ async def push_context(
         db.add(db_context)
         db.commit()
         db.refresh(db_context)
+        
+        # Generate and store embedding
+        embedding = db_context.generate_embedding()
+        DatabaseManager.store_embedding(db_context.id, embedding)
+        
         return db_context
 
 
@@ -100,6 +110,42 @@ async def list_contexts(
         return contexts
     
     return query.all()
+
+
+@app.get("/api/contexts/search/semantic", response_model=List[Context])
+async def semantic_search(
+    query: str,
+    limit: int = 10,
+    threshold: float = 0.5,
+    db: Session = Depends(DatabaseManager.get_db)
+):
+    """Search contexts using semantic similarity"""
+    if not query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+    
+    # Get similar context IDs with similarity scores
+    similar_ids = DatabaseManager.similarity_search(query, limit, threshold)
+    
+    if not similar_ids:
+        return []
+    
+    # Fetch the actual context objects
+    context_ids = [ctx_id for ctx_id, _ in similar_ids]
+    contexts = db.query(ContextDB).filter(ContextDB.id.in_(context_ids)).all()
+    
+    # Sort by similarity score (maintain order from similarity search)
+    context_dict = {ctx.id: ctx for ctx in contexts}
+    sorted_contexts = []
+    for ctx_id, score in similar_ids:
+        if ctx_id in context_dict:
+            ctx = context_dict[ctx_id]
+            # Add similarity score to metadata for reference
+            if ctx.context_metadata is None:
+                ctx.context_metadata = {}
+            ctx.context_metadata['similarity_score'] = score
+            sorted_contexts.append(ctx)
+    
+    return sorted_contexts
 
 
 @app.delete("/api/contexts/{key}")

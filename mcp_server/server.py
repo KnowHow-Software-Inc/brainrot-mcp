@@ -340,6 +340,93 @@ async def list_contexts(
 
 
 @mcp.tool()
+async def search_contexts(
+    query: str,
+    limit: int = 10,
+    threshold: float = 0.5
+) -> Dict[str, Any]:
+    """
+    Search contexts using semantic similarity.
+    
+    This tool uses vector embeddings to find contexts that are semantically similar
+    to your query, even if they don't contain the exact keywords.
+    
+    Args:
+        query: What you're looking for (e.g., "authentication patterns", "database setup")
+        limit: Maximum number of results to return (default: 10)
+        threshold: Minimum similarity score (0.0-1.0, default: 0.5)
+    
+    Returns:
+        List of contexts ranked by semantic similarity with similarity scores
+    
+    Examples:
+        - search_contexts("JWT authentication")  # Find auth-related contexts
+        - search_contexts("error handling patterns", limit=5)  # Find error handling approaches
+        - search_contexts("database configuration", threshold=0.7)  # High-confidence matches only
+    """
+    try:
+        if not query.strip():
+            return {
+                "success": False,
+                "error": "Query cannot be empty"
+            }
+        
+        async with httpx.AsyncClient() as client:
+            params = {
+                "query": query.strip(),
+                "limit": limit,
+                "threshold": threshold
+            }
+            
+            response = await client.get(
+                f"{BACKEND_URL}/api/contexts/search/semantic",
+                params=params,
+                timeout=15.0
+            )
+            response.raise_for_status()
+            
+            contexts = response.json()
+            
+            # Format for display
+            formatted_contexts = []
+            for ctx in contexts:
+                similarity_score = ctx.get("context_metadata", {}).get("similarity_score", 0)
+                formatted_contexts.append({
+                    "key": ctx["key"],
+                    "content": ctx["content"],
+                    "summary": ctx.get("summary"),
+                    "tags": ctx.get("tags", []),
+                    "priority": ctx.get("context_metadata", {}).get("priority") if ctx.get("context_metadata") else None,
+                    "similarity_score": round(similarity_score, 3),
+                    "updated_at": ctx.get("updated_at")
+                })
+            
+            return {
+                "success": True,
+                "query": query,
+                "count": len(formatted_contexts),
+                "contexts": formatted_contexts,
+                "search_params": {
+                    "limit": limit,
+                    "threshold": threshold
+                }
+            }
+            
+    except httpx.HTTPError as e:
+        return {
+            "success": False,
+            "error": f"Failed to search contexts: {str(e)}",
+            "query": query
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Unexpected error: {str(e)}",
+            "query": query
+        }
+
+
+@mcp.tool()
 async def delete_context(key: str) -> Dict[str, Any]:
     """
     Delete a context by its key.
@@ -476,6 +563,184 @@ async def get_context_summary() -> str:
             
     except Exception as e:
         return f"Error getting context summary: {str(e)}"
+
+
+# Prompts for context management workflows
+@mcp.prompt()
+async def analyze_project_context() -> str:
+    """
+    Analyze and summarize the current project's stored context.
+    
+    This prompt helps review all stored contexts to understand the project's
+    architecture decisions, technical debt, and outstanding TODOs.
+    """
+    try:
+        # Get all contexts
+        contexts_result = await list_contexts(limit=50)
+        if not contexts_result.get("success"):
+            return "Error retrieving contexts: " + contexts_result.get("error", "Unknown error")
+        
+        contexts = contexts_result.get("contexts", [])
+        if not contexts:
+            return "No contexts found. Use push_context() to store project information."
+        
+        # Group by tags
+        by_tag = {}
+        for ctx in contexts:
+            tags = ctx.get("tags", ["untagged"])
+            for tag in tags:
+                if tag not in by_tag:
+                    by_tag[tag] = []
+                by_tag[tag].append(ctx)
+        
+        # Generate analysis
+        analysis = ["# Project Context Analysis\n"]
+        analysis.append(f"**Total Contexts:** {len(contexts)}\n")
+        
+        # High priority items first
+        high_priority = [ctx for ctx in contexts if ctx.get("priority") == "high"]
+        if high_priority:
+            analysis.append("## 🚨 High Priority Items")
+            for ctx in high_priority:
+                analysis.append(f"- **{ctx['key']}**: {ctx['summary']}")
+                analysis.append(f"  Tags: {', '.join(ctx.get('tags', []))}")
+            analysis.append("")
+        
+        # By category
+        for tag, items in sorted(by_tag.items()):
+            if tag == "untagged":
+                continue
+            analysis.append(f"## {tag.upper()} ({len(items)} items)")
+            for ctx in items[:3]:  # Show first 3
+                analysis.append(f"- **{ctx['key']}**: {ctx['summary']}")
+            if len(items) > 3:
+                analysis.append(f"  ... and {len(items) - 3} more")
+            analysis.append("")
+        
+        return "\n".join(analysis)
+        
+    except Exception as e:
+        return f"Error analyzing project context: {str(e)}"
+
+
+@mcp.prompt()
+async def suggest_next_actions() -> str:
+    """
+    Suggest next actions based on stored TODOs and technical debt.
+    
+    This prompt reviews stored contexts to prioritize what should be worked on next.
+    """
+    try:
+        # Get TODO and tech debt contexts
+        todo_result = await list_contexts(tag="todo", limit=20)
+        debt_result = await list_contexts(tag="tech-debt", limit=20)
+        
+        suggestions = ["# Suggested Next Actions\n"]
+        
+        # High priority TODOs
+        if todo_result.get("success"):
+            todos = todo_result.get("contexts", [])
+            high_priority_todos = [t for t in todos if t.get("priority") == "high"]
+            
+            if high_priority_todos:
+                suggestions.append("## 🔥 Immediate Actions (High Priority TODOs)")
+                for todo in high_priority_todos:
+                    suggestions.append(f"1. **{todo['key']}**: {todo['summary']}")
+                suggestions.append("")
+        
+        # Technical debt opportunities
+        if debt_result.get("success"):
+            debts = debt_result.get("contexts", [])
+            if debts:
+                suggestions.append("## 🔧 Technical Debt to Address")
+                for debt in debts[:3]:
+                    suggestions.append(f"- **{debt['key']}**: {debt['summary']}")
+                suggestions.append("")
+        
+        # Regular TODOs
+        if todo_result.get("success"):
+            todos = todo_result.get("contexts", [])
+            regular_todos = [t for t in todos if t.get("priority") != "high"]
+            
+            if regular_todos:
+                suggestions.append("## 📝 Other TODOs")
+                for todo in regular_todos[:5]:
+                    priority = todo.get("priority", "medium")
+                    suggestions.append(f"- **{todo['key']}** ({priority}): {todo['summary']}")
+                suggestions.append("")
+        
+        if len(suggestions) == 1:  # Only header
+            suggestions.append("No TODOs or technical debt found.")
+            suggestions.append("Consider using push_context() to track tasks and improvements.")
+        
+        return "\n".join(suggestions)
+        
+    except Exception as e:
+        return f"Error suggesting next actions: {str(e)}"
+
+
+@mcp.prompt()
+async def context_for_feature(feature_name: str) -> str:
+    """
+    Get relevant context for implementing a specific feature.
+    
+    This prompt searches stored contexts for patterns, decisions, and considerations
+    relevant to implementing a new feature.
+    
+    Args:
+        feature_name: Name or description of the feature to implement
+    """
+    try:
+        # Get all contexts
+        all_contexts = await list_contexts(limit=100)
+        if not all_contexts.get("success"):
+            return f"Error retrieving contexts: {all_contexts.get('error', 'Unknown error')}"
+        
+        contexts = all_contexts.get("contexts", [])
+        if not contexts:
+            return "No stored contexts found. Consider storing architectural decisions and patterns first."
+        
+        # Search for relevant contexts (simple keyword matching)
+        feature_keywords = feature_name.lower().split()
+        relevant_contexts = []
+        
+        for ctx in contexts:
+            content_lower = (ctx.get("summary", "") + " " + ctx.get("key", "")).lower()
+            if any(keyword in content_lower for keyword in feature_keywords):
+                relevant_contexts.append(ctx)
+        
+        response = [f"# Context for Feature: {feature_name}\n"]
+        
+        if relevant_contexts:
+            response.append("## 🎯 Directly Relevant Contexts")
+            for ctx in relevant_contexts:
+                response.append(f"- **{ctx['key']}**: {ctx['summary']}")
+                response.append(f"  Tags: {', '.join(ctx.get('tags', []))}")
+            response.append("")
+        
+        # Always show architecture and security contexts
+        arch_contexts = [ctx for ctx in contexts if "architecture" in ctx.get("tags", [])]
+        if arch_contexts:
+            response.append("## 📐 Architecture Decisions to Consider")
+            for ctx in arch_contexts[:3]:
+                response.append(f"- **{ctx['key']}**: {ctx['summary']}")
+            response.append("")
+        
+        security_contexts = [ctx for ctx in contexts if "security" in ctx.get("tags", [])]
+        if security_contexts:
+            response.append("## 🔒 Security Considerations")
+            for ctx in security_contexts[:3]:
+                response.append(f"- **{ctx['key']}**: {ctx['summary']}")
+            response.append("")
+        
+        if not relevant_contexts and not arch_contexts and not security_contexts:
+            response.append("No directly relevant contexts found.")
+            response.append("Consider reviewing all stored contexts or adding feature-specific context.")
+        
+        return "\n".join(response)
+        
+    except Exception as e:
+        return f"Error getting context for feature: {str(e)}"
 
 
 if __name__ == "__main__":
