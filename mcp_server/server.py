@@ -360,6 +360,93 @@ async def list_contexts(
 
 
 @mcp.tool()
+async def search_contexts(
+    query: str,
+    limit: int = 10,
+    threshold: float = 0.5
+) -> Dict[str, Any]:
+    """
+    Search contexts using semantic similarity.
+    
+    This tool uses vector embeddings to find contexts that are semantically similar
+    to your query, even if they don't contain the exact keywords.
+    
+    Args:
+        query: What you're looking for (e.g., "authentication patterns", "database setup")
+        limit: Maximum number of results to return (default: 10)
+        threshold: Minimum similarity score (0.0-1.0, default: 0.5)
+    
+    Returns:
+        List of contexts ranked by semantic similarity with similarity scores
+    
+    Examples:
+        - search_contexts("JWT authentication")  # Find auth-related contexts
+        - search_contexts("error handling patterns", limit=5)  # Find error handling approaches
+        - search_contexts("database configuration", threshold=0.7)  # High-confidence matches only
+    """
+    try:
+        if not query.strip():
+            return {
+                "success": False,
+                "error": "Query cannot be empty"
+            }
+        
+        async with httpx.AsyncClient() as client:
+            params = {
+                "query": query.strip(),
+                "limit": limit,
+                "threshold": threshold
+            }
+            
+            response = await client.get(
+                f"{BACKEND_URL}/api/contexts/search/semantic",
+                params=params,
+                timeout=15.0
+            )
+            response.raise_for_status()
+            
+            contexts = response.json()
+            
+            # Format for display
+            formatted_contexts = []
+            for ctx in contexts:
+                similarity_score = ctx.get("context_metadata", {}).get("similarity_score", 0)
+                formatted_contexts.append({
+                    "key": ctx["key"],
+                    "content": ctx["content"],
+                    "summary": ctx.get("summary"),
+                    "tags": ctx.get("tags", []),
+                    "priority": ctx.get("context_metadata", {}).get("priority") if ctx.get("context_metadata") else None,
+                    "similarity_score": round(similarity_score, 3),
+                    "updated_at": ctx.get("updated_at")
+                })
+            
+            return {
+                "success": True,
+                "query": query,
+                "count": len(formatted_contexts),
+                "contexts": formatted_contexts,
+                "search_params": {
+                    "limit": limit,
+                    "threshold": threshold
+                }
+            }
+            
+    except httpx.HTTPError as e:
+        return {
+            "success": False,
+            "error": f"Failed to search contexts: {str(e)}",
+            "query": query
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Unexpected error: {str(e)}",
+            "query": query
+        }
+
+
+@mcp.tool()
 async def delete_context(key: str) -> Dict[str, Any]:
     """
     Delete a context by its key.
