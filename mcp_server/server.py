@@ -6,7 +6,11 @@ Brainrot MCP Server - Context Management for AI Coding Sessions
 import os
 import json
 import httpx
-from typing import Dict, Any, Optional, List
+import subprocess
+import time
+import atexit
+from pathlib import Path
+from typing import Dict, Any, Optional, List, Union
 from fastmcp import FastMCP
 from dotenv import load_dotenv
 
@@ -16,8 +20,72 @@ load_dotenv()
 # Configuration
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
+# Backend process tracking
+_backend_process = None
+
 # Initialize MCP server
 mcp = FastMCP("brainrot-context-manager")
+
+
+def start_backend():
+    """Start the backend API server if it's not already running."""
+    global _backend_process
+    
+    # Check if backend is already running
+    try:
+        async with httpx.AsyncClient() as client:
+            response = client.get(f"{BACKEND_URL}/health", timeout=2.0)
+            if response.status_code == 200:
+                print(f"✅ Backend already running at {BACKEND_URL}")
+                return
+    except:
+        pass  # Backend not running, we'll start it
+    
+    # Start the backend
+    backend_dir = Path(__file__).parent.parent / "backend"
+    if not backend_dir.exists():
+        print(f"❌ Backend directory not found: {backend_dir}")
+        return
+    
+    print(f"🚀 Starting backend server at {BACKEND_URL}...")
+    try:
+        _backend_process = subprocess.Popen(
+            ["uv", "run", "python", "server.py"],
+            cwd=backend_dir,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        
+        # Wait a moment for startup
+        time.sleep(3)
+        
+        # Verify it started
+        try:
+            import httpx
+            with httpx.Client() as client:
+                response = client.get(f"{BACKEND_URL}/health", timeout=5.0)
+                if response.status_code == 200:
+                    print(f"✅ Backend started successfully at {BACKEND_URL}")
+                else:
+                    print(f"⚠️ Backend may not have started properly")
+        except:
+            print(f"⚠️ Backend startup verification failed")
+            
+    except Exception as e:
+        print(f"❌ Failed to start backend: {e}")
+
+
+def cleanup_backend():
+    """Clean up the backend process on exit."""
+    global _backend_process
+    if _backend_process:
+        print("🛑 Stopping backend server...")
+        _backend_process.terminate()
+        _backend_process.wait(timeout=5)
+
+
+# Register cleanup function
+atexit.register(cleanup_backend)
 
 
 def summarize_content(content: str, max_length: int = 500) -> str:
@@ -44,8 +112,8 @@ def summarize_content(content: str, max_length: int = 500) -> str:
 async def push_context(
     key: str,
     content: str,
-    tags: Optional[List[str]] = None,
-    priority: Optional[str] = "medium"
+    tags: Any = None,
+    priority: str = "medium"
 ) -> Dict[str, Any]:
     """
     Push (store) context from the current session for later retrieval.
@@ -56,7 +124,7 @@ async def push_context(
     Args:
         key: Unique identifier for this context (e.g., "auth-pattern", "todo-refactor-api")
         content: The full context to store
-        tags: Optional list of tags for categorization (e.g., ["architecture", "security"])
+        tags: Tags for categorization - can be array ["architecture", "security"] or string "architecture,security"
         priority: Priority level (low, medium, high) - useful for TODOs and tech debt
     
     Returns:
@@ -70,12 +138,22 @@ async def push_context(
         # Create a summary of the content
         summary = summarize_content(content, max_length=200)
         
+        # Parse tags - handle both array and string inputs
+        parsed_tags = []
+        if tags:
+            if isinstance(tags, list):
+                # If it's already a list, use it directly
+                parsed_tags = [str(tag).strip() for tag in tags if str(tag).strip()]
+            elif isinstance(tags, str) and tags.strip():
+                # If it's a string, split by comma
+                parsed_tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+        
         # Prepare the context data
         context_data = {
             "key": key,
             "content": content,
             "summary": summary,
-            "tags": tags or [],
+            "tags": parsed_tags,
             "context_metadata": {
                 "priority": priority,
                 "source": "mcp_push",
@@ -193,7 +271,7 @@ async def pop_context(
 
 @mcp.tool()
 async def list_contexts(
-    tag: Optional[str] = None,
+    tag: str = "",
     limit: int = 20
 ) -> Dict[str, Any]:
     """
@@ -216,8 +294,8 @@ async def list_contexts(
     try:
         async with httpx.AsyncClient() as client:
             params = {}
-            if tag:
-                params["tag"] = tag
+            if tag and tag.strip():
+                params["tag"] = tag.strip()
                 
             response = await client.get(
                 f"{BACKEND_URL}/api/contexts",
@@ -246,7 +324,7 @@ async def list_contexts(
                 "success": True,
                 "count": len(formatted_contexts),
                 "contexts": formatted_contexts,
-                "filter": {"tag": tag} if tag else None
+                "filter": {"tag": tag} if tag and tag.strip() else None
             }
             
     except httpx.HTTPError as e:
@@ -401,5 +479,8 @@ async def get_context_summary() -> str:
 
 
 if __name__ == "__main__":
-    # Run the server
+    # Start backend if needed
+    start_backend()
+    
+    # Run the MCP server
     mcp.run()

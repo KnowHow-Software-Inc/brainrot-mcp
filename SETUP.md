@@ -21,7 +21,7 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 uv --version
 ```
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Automatic Setup)
 
 ### 1. Clone and Navigate
 
@@ -30,7 +30,43 @@ git clone <your-repo-url>
 cd brainrot-mcp
 ```
 
-### 2. Backend Server Setup
+### 2. Configure Claude Desktop
+
+Add the MCP server to your Claude Desktop configuration:
+
+**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "brainrot": {
+      "command": "uv",
+      "args": ["run", "python", "/absolute/path/to/brainrot-mcp/mcp_server/server.py"],
+      "env": {
+        "BACKEND_URL": "http://localhost:8000"
+      }
+    }
+  }
+}
+```
+
+**Important:** Replace `/absolute/path/to/brainrot-mcp` with your actual project path.
+
+### 3. Restart Claude Desktop
+
+Restart Claude Desktop to load the new MCP server configuration.
+
+**That's it!** The MCP server will automatically:
+- ✅ Start the backend API server if it's not running
+- ✅ Set up all required dependencies
+- ✅ Handle cleanup when shutting down
+
+## 🛠️ Manual Setup (Alternative)
+
+If you prefer to run services separately or for development:
+
+### 1. Backend Server Setup
 
 ```bash
 # Navigate to backend directory
@@ -54,7 +90,7 @@ uv run python server.py
 
 The backend server will start on `http://localhost:8000`
 
-### 3. MCP Server Setup
+### 2. MCP Server Setup
 
 In a new terminal:
 
@@ -78,32 +114,16 @@ uv pip install -e .
 uv run python server.py
 ```
 
-### 4. Configure Claude Desktop
+### 3. Testing the MCP Server
 
-Add the MCP server to your Claude Desktop configuration:
+Test the MCP server with the inspector:
 
-**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "brainrot": {
-      "command": "uv",
-      "args": ["run", "python", "/absolute/path/to/brainrot-mcp/mcp_server/server.py"],
-      "env": {
-        "BACKEND_URL": "http://localhost:8000"
-      }
-    }
-  }
-}
+```bash
+cd mcp_server
+npx @modelcontextprotocol/inspector uv run python server.py
 ```
 
-**Important:** Replace `/absolute/path/to/brainrot-mcp` with your actual project path.
-
-### 5. Restart Claude Desktop
-
-Restart Claude Desktop to load the new MCP server configuration.
+This opens a web interface to test MCP tools.
 
 ## 🔧 Alternative Setup Methods
 
@@ -311,11 +331,15 @@ python --version  # Should be 3.12+
 
 ### Starting Development Session
 
+**Option 1: Automatic (recommended)**
+- Just restart Claude Desktop and the MCP server will automatically start the backend
+
+**Option 2: Manual (for development/testing)**
 ```bash
-# Terminal 1: Backend
+# Terminal 1: Backend only
 cd backend && uv run python server.py
 
-# Terminal 2: MCP Server (for testing)
+# Terminal 2: MCP Inspector (for testing tools)
 cd mcp_server && npx @modelcontextprotocol/inspector uv run python server.py
 
 # Terminal 3: Development work
