@@ -124,15 +124,17 @@ async def push_context(
     Args:
         key: Unique identifier for this context (e.g., "auth-pattern", "todo-refactor-api")
         content: The full context to store
-        tags: List of tags for categorization (e.g., ["architecture", "security"])
+        tags: Tags for categorization - ALWAYS include project name first, then categories
         priority: Priority level (low, medium, high) - useful for TODOs and tech debt
     
     Returns:
         Confirmation of storage with the key and summary
     
     Examples:
-        - push_context("auth-flow", "JWT with refresh tokens...", ["security", "architecture"])
-        - push_context("todo-validation", "Add input validation to user endpoints", ["todo", "backend"])
+        - push_context("auth-flow", "JWT with refresh tokens...", ["my-app", "security", "architecture"])
+        - push_context("todo-validation", "Add input validation to user endpoints", ["my-app", "todo", "backend"])
+    
+    IMPORTANT: Always include your project name as the first tag to enable filtering by project.
     """
     try:
         # Create a summary of the content
@@ -509,11 +511,14 @@ async def analyze_project_context() -> str:
     """
     try:
         # Get all contexts
-        contexts_result = await list_contexts(limit=50)
-        if not contexts_result.get("success"):
-            return "Error retrieving contexts: " + contexts_result.get("error", "Unknown error")
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{BACKEND_URL}/api/contexts",
+                timeout=10.0
+            )
+            response.raise_for_status()
+            contexts = response.json()
         
-        contexts = contexts_result.get("contexts", [])
         if not contexts:
             return "No contexts found. Use push_context() to store project information."
         
@@ -531,11 +536,12 @@ async def analyze_project_context() -> str:
         analysis.append(f"**Total Contexts:** {len(contexts)}\n")
         
         # High priority items first
-        high_priority = [ctx for ctx in contexts if ctx.get("priority") == "high"]
+        high_priority = [ctx for ctx in contexts if ctx.get("context_metadata", {}).get("priority") == "high"]
         if high_priority:
             analysis.append("## 🚨 High Priority Items")
             for ctx in high_priority:
-                analysis.append(f"- **{ctx['key']}**: {ctx['summary']}")
+                summary = ctx.get("summary", ctx["content"][:100] + "...")
+                analysis.append(f"- **{ctx['key']}**: {summary}")
                 analysis.append(f"  Tags: {', '.join(ctx.get('tags', []))}")
             analysis.append("")
         
@@ -545,13 +551,16 @@ async def analyze_project_context() -> str:
                 continue
             analysis.append(f"## {tag.upper()} ({len(items)} items)")
             for ctx in items[:3]:  # Show first 3
-                analysis.append(f"- **{ctx['key']}**: {ctx['summary']}")
+                summary = ctx.get("summary", ctx["content"][:100] + "...")
+                analysis.append(f"- **{ctx['key']}**: {summary}")
             if len(items) > 3:
                 analysis.append(f"  ... and {len(items) - 3} more")
             analysis.append("")
         
         return "\n".join(analysis)
         
+    except httpx.HTTPError as e:
+        return f"Error retrieving contexts from backend: {str(e)}"
     except Exception as e:
         return f"Error analyzing project context: {str(e)}"
 
@@ -564,43 +573,47 @@ async def suggest_next_actions() -> str:
     This prompt reviews stored contexts to prioritize what should be worked on next.
     """
     try:
-        # Get TODO and tech debt contexts
-        todo_result = await list_contexts(tag="todo", limit=20)
-        debt_result = await list_contexts(tag="tech-debt", limit=20)
+        # Get all contexts and filter for TODOs and tech debt
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{BACKEND_URL}/api/contexts",
+                timeout=10.0
+            )
+            response.raise_for_status()
+            contexts = response.json()
+        
+        # Filter for TODOs and tech debt
+        todos = [ctx for ctx in contexts if "todo" in ctx.get("tags", [])]
+        debts = [ctx for ctx in contexts if "tech-debt" in ctx.get("tags", []) or "tech_debt" in ctx.get("tags", [])]
         
         suggestions = ["# Suggested Next Actions\n"]
         
         # High priority TODOs
-        if todo_result.get("success"):
-            todos = todo_result.get("contexts", [])
-            high_priority_todos = [t for t in todos if t.get("priority") == "high"]
-            
-            if high_priority_todos:
-                suggestions.append("## 🔥 Immediate Actions (High Priority TODOs)")
-                for todo in high_priority_todos:
-                    suggestions.append(f"1. **{todo['key']}**: {todo['summary']}")
-                suggestions.append("")
+        high_priority_todos = [t for t in todos if t.get("context_metadata", {}).get("priority") == "high"]
+        if high_priority_todos:
+            suggestions.append("## 🔥 Immediate Actions (High Priority TODOs)")
+            for todo in high_priority_todos:
+                summary = todo.get("summary", todo["content"][:100] + "...")
+                suggestions.append(f"1. **{todo['key']}**: {summary}")
+            suggestions.append("")
         
         # Technical debt opportunities
-        if debt_result.get("success"):
-            debts = debt_result.get("contexts", [])
-            if debts:
-                suggestions.append("## 🔧 Technical Debt to Address")
-                for debt in debts[:3]:
-                    suggestions.append(f"- **{debt['key']}**: {debt['summary']}")
-                suggestions.append("")
+        if debts:
+            suggestions.append("## 🔧 Technical Debt to Address")
+            for debt in debts[:3]:
+                summary = debt.get("summary", debt["content"][:100] + "...")
+                suggestions.append(f"- **{debt['key']}**: {summary}")
+            suggestions.append("")
         
         # Regular TODOs
-        if todo_result.get("success"):
-            todos = todo_result.get("contexts", [])
-            regular_todos = [t for t in todos if t.get("priority") != "high"]
-            
-            if regular_todos:
-                suggestions.append("## 📝 Other TODOs")
-                for todo in regular_todos[:5]:
-                    priority = todo.get("priority", "medium")
-                    suggestions.append(f"- **{todo['key']}** ({priority}): {todo['summary']}")
-                suggestions.append("")
+        regular_todos = [t for t in todos if t.get("context_metadata", {}).get("priority") != "high"]
+        if regular_todos:
+            suggestions.append("## 📝 Other TODOs")
+            for todo in regular_todos[:5]:
+                priority = todo.get("context_metadata", {}).get("priority", "medium")
+                summary = todo.get("summary", todo["content"][:100] + "...")
+                suggestions.append(f"- **{todo['key']}** ({priority}): {summary}")
+            suggestions.append("")
         
         if len(suggestions) == 1:  # Only header
             suggestions.append("No TODOs or technical debt found.")
@@ -608,6 +621,8 @@ async def suggest_next_actions() -> str:
         
         return "\n".join(suggestions)
         
+    except httpx.HTTPError as e:
+        return f"Error retrieving contexts from backend: {str(e)}"
     except Exception as e:
         return f"Error suggesting next actions: {str(e)}"
 
@@ -624,12 +639,16 @@ async def context_for_feature(feature_name: str) -> str:
         feature_name: Name or description of the feature to implement
     """
     try:
-        # Get all contexts
-        all_contexts = await list_contexts(limit=100)
-        if not all_contexts.get("success"):
-            return f"Error retrieving contexts: {all_contexts.get('error', 'Unknown error')}"
-        
-        contexts = all_contexts.get("contexts", [])
+        # Make HTTP request to backend to get all contexts
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{BACKEND_URL}/api/contexts",
+                timeout=10.0
+            )
+            response.raise_for_status()
+            
+            contexts = response.json()
+            
         if not contexts:
             return "No stored contexts found. Consider storing architectural decisions and patterns first."
         
@@ -642,36 +661,38 @@ async def context_for_feature(feature_name: str) -> str:
             if any(keyword in content_lower for keyword in feature_keywords):
                 relevant_contexts.append(ctx)
         
-        response = [f"# Context for Feature: {feature_name}\n"]
+        response_lines = [f"# Context for Feature: {feature_name}\n"]
         
         if relevant_contexts:
-            response.append("## 🎯 Directly Relevant Contexts")
+            response_lines.append("## 🎯 Directly Relevant Contexts")
             for ctx in relevant_contexts:
-                response.append(f"- **{ctx['key']}**: {ctx['summary']}")
-                response.append(f"  Tags: {', '.join(ctx.get('tags', []))}")
-            response.append("")
+                response_lines.append(f"- **{ctx['key']}**: {ctx.get('summary', ctx['content'][:100] + '...')}")
+                response_lines.append(f"  Tags: {', '.join(ctx.get('tags', []))}")
+            response_lines.append("")
         
         # Always show architecture and security contexts
         arch_contexts = [ctx for ctx in contexts if "architecture" in ctx.get("tags", [])]
         if arch_contexts:
-            response.append("## 📐 Architecture Decisions to Consider")
+            response_lines.append("## 📐 Architecture Decisions to Consider")
             for ctx in arch_contexts[:3]:
-                response.append(f"- **{ctx['key']}**: {ctx['summary']}")
-            response.append("")
+                response_lines.append(f"- **{ctx['key']}**: {ctx.get('summary', ctx['content'][:100] + '...')}")
+            response_lines.append("")
         
         security_contexts = [ctx for ctx in contexts if "security" in ctx.get("tags", [])]
         if security_contexts:
-            response.append("## 🔒 Security Considerations")
+            response_lines.append("## 🔒 Security Considerations")
             for ctx in security_contexts[:3]:
-                response.append(f"- **{ctx['key']}**: {ctx['summary']}")
-            response.append("")
+                response_lines.append(f"- **{ctx['key']}**: {ctx.get('summary', ctx['content'][:100] + '...')}")
+            response_lines.append("")
         
         if not relevant_contexts and not arch_contexts and not security_contexts:
-            response.append("No directly relevant contexts found.")
-            response.append("Consider reviewing all stored contexts or adding feature-specific context.")
+            response_lines.append("No directly relevant contexts found.")
+            response_lines.append("Consider reviewing all stored contexts or adding feature-specific context.")
         
-        return "\n".join(response)
+        return "\n".join(response_lines)
         
+    except httpx.HTTPError as e:
+        return f"Error retrieving contexts from backend: {str(e)}"
     except Exception as e:
         return f"Error getting context for feature: {str(e)}"
 
@@ -767,16 +788,21 @@ Search your codebase for:
    - Security considerations from research
    - Configuration examples
    - Testing approaches
-4. Store with tags: ["authentication", "security", "jwt", "architecture"]
+4. Store with tags: ["my-app", "authentication", "security", "jwt", "architecture"]
 
 ### Example 2: Database Schema Design
 1. Read migration files and model code
 2. Research database best practices
 3. Document design decisions and rationale
 4. Include performance considerations
-5. Store with tags: ["database", "schema", "users", "architecture"]
+5. Store with tags: ["my-app", "database", "schema", "users", "architecture"]
 
 ## 🏷️ Effective Tagging Strategy
+
+### Project Identification (REQUIRED)
+- **ALWAYS include your project name** as the first tag
+- Examples: `brainrot-mcp`, `my-blog`, `ecommerce-api`, `mobile-app`
+- This enables filtering contexts by project when working on multiple codebases
 
 ### Primary Categories
 - `architecture` - High-level design decisions
@@ -827,6 +853,11 @@ Search your codebase for:
    - Link to complementary patterns
 
 ## 🔍 Finding Context Later
+
+### Project-Specific Retrieval
+- Filter by project: list_contexts(tag="my-app")
+- Project authentication contexts: list_contexts(tag="my-app") + filter by "authentication"
+- All project TODOs: list_contexts(tag="my-app") + filter by "todo"
 
 ### Quick Retrieval
 - Get specific context: pop_context("user-auth-jwt-pattern")
@@ -1085,7 +1116,7 @@ cp .env.example .env
 ### Example 1: Django Web Application
 ```
 Key: "django-project-setup"
-Tags: ["setup", "django", "python", "environment", "database"]
+Tags: ["my-blog", "setup", "django", "python", "environment", "database"]
 Priority: "high"
 
 Content should include:
@@ -1102,7 +1133,7 @@ Content should include:
 ### Example 2: React + Node.js Full Stack
 ```
 Key: "fullstack-dev-environment"
-Tags: ["setup", "react", "nodejs", "fullstack", "environment"]
+Tags: ["ecommerce-app", "setup", "react", "nodejs", "fullstack", "environment"]
 Priority: "high"
 
 Content should include:
@@ -1118,7 +1149,7 @@ Content should include:
 ### Example 3: Microservices with Docker
 ```
 Key: "microservices-docker-setup"
-Tags: ["setup", "docker", "microservices", "environment"]
+Tags: ["payment-service", "setup", "docker", "microservices", "environment"]
 Priority: "high"
 
 Content should include:
@@ -1174,7 +1205,7 @@ Content should include:
 await push_context(
     key="project-setup-complete",
     content=setup_instructions,
-    tags=["setup", "environment", "dependencies", "onboarding"],
+    tags=["my-project", "setup", "environment", "dependencies", "onboarding"],
     priority="high"
 )
 ```
@@ -1184,8 +1215,11 @@ await push_context(
 # Get setup instructions
 setup = await pop_context("project-setup-complete")
 
-# Find all setup-related contexts
-setups = await list_contexts(tag="setup")
+# Find all setup contexts for this project
+setups = await list_contexts(tag="my-project")
+
+# Find setup contexts across all projects
+all_setups = await list_contexts(tag="setup")
 ```
 
 ---
