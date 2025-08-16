@@ -112,7 +112,7 @@ def summarize_content(content: str, max_length: int = 500) -> str:
 async def push_context(
     key: str,
     content: str,
-    tags: Optional[Union[List[str], str]] = None,
+    tags: Optional[List[str]] = None,
     priority: str = "medium"
 ) -> Dict[str, Any]:
     """
@@ -138,35 +138,41 @@ async def push_context(
         # Create a summary of the content
         summary = summarize_content(content, max_length=200)
         
-        # Parse tags - handle both array and string inputs
+        # Process tags - handle potential JSON string from MCP framework
         parsed_tags = []
         
-        # Debug logging
-        with open("/tmp/brainrot_debug.log", "a") as f:
-            f.write(f"tags type: {type(tags)}, value: {repr(tags)}\n")
+        # Debug logging to file
+        import os
+        debug_path = "/tmp/mcp_tags_debug.log"
+        with open(debug_path, "a") as f:
+            f.write(f"\n--- New Request ---\n")
+            f.write(f"tags type: {type(tags)}\n")
+            f.write(f"tags value: {repr(tags)}\n")
+            f.write(f"tags is str: {isinstance(tags, str)}\n")
+            f.write(f"tags is list: {isinstance(tags, list)}\n")
         
         if tags:
-            if isinstance(tags, list):
-                # If it's already a list, use it directly
-                parsed_tags = [str(tag).strip() for tag in tags if str(tag).strip()]
-            elif isinstance(tags, str) and tags.strip():
-                # Check if it's a JSON-encoded array string
+            # Check if tags is actually a string (MCP framework issue)
+            if isinstance(tags, str):
+                # It's a JSON-encoded string, parse it
                 if tags.strip().startswith('[') and tags.strip().endswith(']'):
                     try:
                         import json
                         parsed_tags = json.loads(tags)
-                        # Ensure all items are strings
                         parsed_tags = [str(tag).strip() for tag in parsed_tags if str(tag).strip()]
                     except json.JSONDecodeError:
-                        # If JSON parsing fails, treat as comma-separated
-                        parsed_tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+                        # Fallback: treat as single tag
+                        parsed_tags = [tags.strip()] if tags.strip() else []
                 else:
-                    # If it's a regular string, split by comma
-                    parsed_tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+                    # Single tag as string
+                    parsed_tags = [tags.strip()] if tags.strip() else []
+            elif isinstance(tags, list):
+                # Proper list received
+                parsed_tags = [str(tag).strip() for tag in tags if str(tag).strip()]
         
-        # Debug logging result
-        with open("/tmp/brainrot_debug.log", "a") as f:
-            f.write(f"parsed_tags: {repr(parsed_tags)}\n\n")
+        # Log the parsed result
+        with open(debug_path, "a") as f:
+            f.write(f"parsed_tags: {repr(parsed_tags)}\n")
         
         # Prepare the context data
         context_data = {
@@ -356,6 +362,93 @@ async def list_contexts(
         return {
             "success": False,
             "error": f"Unexpected error: {str(e)}"
+        }
+
+
+@mcp.tool()
+async def search_contexts(
+    query: str,
+    limit: int = 10,
+    threshold: float = 0.5
+) -> Dict[str, Any]:
+    """
+    Search contexts using semantic similarity.
+    
+    This tool uses vector embeddings to find contexts that are semantically similar
+    to your query, even if they don't contain the exact keywords.
+    
+    Args:
+        query: What you're looking for (e.g., "authentication patterns", "database setup")
+        limit: Maximum number of results to return (default: 10)
+        threshold: Minimum similarity score (0.0-1.0, default: 0.5)
+    
+    Returns:
+        List of contexts ranked by semantic similarity with similarity scores
+    
+    Examples:
+        - search_contexts("JWT authentication")  # Find auth-related contexts
+        - search_contexts("error handling patterns", limit=5)  # Find error handling approaches
+        - search_contexts("database configuration", threshold=0.7)  # High-confidence matches only
+    """
+    try:
+        if not query.strip():
+            return {
+                "success": False,
+                "error": "Query cannot be empty"
+            }
+        
+        async with httpx.AsyncClient() as client:
+            params = {
+                "query": query.strip(),
+                "limit": limit,
+                "threshold": threshold
+            }
+            
+            response = await client.get(
+                f"{BACKEND_URL}/api/contexts/search/semantic",
+                params=params,
+                timeout=15.0
+            )
+            response.raise_for_status()
+            
+            contexts = response.json()
+            
+            # Format for display
+            formatted_contexts = []
+            for ctx in contexts:
+                similarity_score = ctx.get("context_metadata", {}).get("similarity_score", 0)
+                formatted_contexts.append({
+                    "key": ctx["key"],
+                    "content": ctx["content"],
+                    "summary": ctx.get("summary"),
+                    "tags": ctx.get("tags", []),
+                    "priority": ctx.get("context_metadata", {}).get("priority") if ctx.get("context_metadata") else None,
+                    "similarity_score": round(similarity_score, 3),
+                    "updated_at": ctx.get("updated_at")
+                })
+            
+            return {
+                "success": True,
+                "query": query,
+                "count": len(formatted_contexts),
+                "contexts": formatted_contexts,
+                "search_params": {
+                    "limit": limit,
+                    "threshold": threshold
+                }
+            }
+            
+    except httpx.HTTPError as e:
+        return {
+            "success": False,
+            "error": f"Failed to search contexts: {str(e)}",
+            "query": query
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Unexpected error: {str(e)}",
+            "query": query
         }
 
 
@@ -674,525 +767,6 @@ async def context_for_feature(feature_name: str) -> str:
         
     except Exception as e:
         return f"Error getting context for feature: {str(e)}"
-
-
-@mcp.prompt()
-async def assemble_context_guide() -> str:
-    """
-    Guide for assembling rich context from multiple sources (files, websites, code) and storing it in Brainrot.
-    
-    This prompt provides step-by-step instructions for gathering comprehensive context
-    from various sources and creating well-structured context entries.
-    """
-    guide_text = """# 📚 Context Assembly Guide
-
-## Overview
-Learn how to gather comprehensive context from multiple sources and store it effectively in Brainrot for future AI sessions.
-
-## 🎯 What Makes Good Context?
-
-**Rich, Multi-Source Context Includes:**
-- Code snippets with explanations
-- Architecture decisions and rationale  
-- External documentation and best practices
-- Requirements and constraints
-- Examples and patterns
-
-## 🔄 Step-by-Step Assembly Process
-
-### 1. Identify Your Context Topic
-Choose a clear, specific key for your context:
-
-Examples:
-- "user-auth-jwt-pattern"
-- "database-migration-strategy" 
-- "error-handling-frontend"
-- "api-rate-limiting-approach"
-
-### 2. Gather Information from Multiple Sources
-
-#### 📁 From Local Files
-Read relevant code files:
-- Configuration files (package.json, requirements.txt, etc.)
-- Implementation files (.js, .py, .java, etc.)
-- Documentation files (README.md, DOCS.md, etc.)
-- Test files for usage examples
-
-#### 🌐 From Web Sources
-Use WebSearch to find:
-- Official documentation
-- Best practices articles
-- Stack Overflow solutions
-- GitHub examples
-- Blog posts from experts
-
-#### 🔍 From Existing Codebase
-Search your codebase for:
-- Similar patterns already implemented
-- Related utility functions
-- Error handling approaches
-- Testing strategies
-
-### 3. Assemble Comprehensive Context
-
-#### Template for Rich Context:
-## Overview
-[Brief description of what this context covers]
-
-## Implementation Details
-[Code snippets, configurations, key files]
-
-## Architecture Rationale
-[Why this approach was chosen, trade-offs considered]
-
-## External References
-[Links to documentation, articles, examples]
-
-## Usage Examples
-[How to apply this pattern, common use cases]
-
-## Gotchas & Considerations
-[Known issues, edge cases, things to watch out for]
-
-## Related Patterns
-[Links to other contexts or approaches]
-
-## 🛠️ Practical Assembly Examples
-
-### Example 1: JWT Authentication Pattern
-1. Read your auth implementation files
-2. Research JWT best practices online
-3. Assemble comprehensive context including:
-   - Current implementation code
-   - Security considerations from research
-   - Configuration examples
-   - Testing approaches
-4. Store with tags: ["authentication", "security", "jwt", "architecture"]
-
-### Example 2: Database Schema Design
-1. Read migration files and model code
-2. Research database best practices
-3. Document design decisions and rationale
-4. Include performance considerations
-5. Store with tags: ["database", "schema", "users", "architecture"]
-
-## 🏷️ Effective Tagging Strategy
-
-### Primary Categories
-- `architecture` - High-level design decisions
-- `security` - Security patterns and considerations
-- `performance` - Optimization strategies
-- `testing` - Testing approaches and patterns
-- `deployment` - Infrastructure and deployment
-- `api` - API design and implementation
-- `frontend` - UI/UX patterns and components
-- `backend` - Server-side implementation
-- `database` - Data modeling and queries
-
-### Secondary Tags
-- `todo` - Tasks to be completed
-- `tech-debt` - Known issues to address
-- `pattern` - Reusable code patterns
-- `config` - Configuration management
-- `monitoring` - Logging and observability
-
-### Priority Levels
-- `high` - Critical decisions, urgent TODOs
-- `medium` - Important patterns, regular tasks
-- `low` - Nice-to-have improvements, references
-
-## 📋 Assembly Workflow
-
-1. **Start with a Clear Goal**
-   - What specific knowledge do you want to preserve?
-   - Who will use this context later?
-
-2. **Gather from Multiple Sources**
-   - Read 2-3 relevant code files
-   - Search web for best practices
-   - Check existing contexts for related patterns
-
-3. **Structure the Information**
-   - Use markdown headers for organization
-   - Include code snippets with explanations
-   - Add external links for deeper reading
-
-4. **Store with Rich Metadata**
-   - Choose descriptive, searchable key
-   - Add 3-5 relevant tags
-   - Set appropriate priority level
-
-5. **Cross-Reference Related Contexts**
-   - Mention related context keys
-   - Link to complementary patterns
-
-## 🔍 Finding Context Later
-
-### Quick Retrieval
-- Get specific context: pop_context("user-auth-jwt-pattern")
-- Search by topic: list_contexts(tag="authentication")
-- Semantic search: search_contexts("JWT token management")
-
-### Discovery
-- See all available contexts: list_contexts()
-- Get project overview: analyze_project_context()
-- Find next tasks: suggest_next_actions()
-
-## 💡 Pro Tips
-
-1. **Be Specific but Searchable**
-   - Good: "react-component-error-boundaries"
-   - Avoid: "error-stuff" or "component-thing"
-
-2. **Include the 'Why' Not Just the 'What'**
-   - Explain reasoning behind decisions
-   - Note alternatives considered and rejected
-
-3. **Update Over Time**
-   - Contexts can evolve with your codebase
-   - Update when patterns change or improve
-
-4. **Cross-Reference Heavily**
-   - Link related contexts together
-   - Build a knowledge graph of your decisions
-
-5. **Use Rich Formatting**
-   - Code blocks with syntax highlighting
-   - Clear headers and organization
-   - Bullet points for quick scanning
-
----
-
-**Remember:** The goal is to create context so rich that your future AI sessions can immediately understand and apply your project's patterns, decisions, and knowledge without lengthy explanations.
-
-## 🚀 Getting Started
-
-1. Use push_context() to store your first context
-2. Try the assemble_context_guide prompt to see this guide
-3. Use list_contexts() to see what you've stored
-4. Use pop_context() to retrieve contexts in future sessions
-
-The more rich context you store now, the more effective your future AI coding sessions will be!"""
-    
-    return guide_text
-
-
-@mcp.prompt()
-async def setup_context_guide() -> str:
-    """
-    Guide for creating comprehensive project setup and virtual environment context.
-    
-    This prompt helps you document everything needed to get a project running,
-    including virtual environments, dependencies, configuration, and run instructions.
-    """
-    setup_guide = """# 🔧 Project Setup Context Guide
-
-## Overview
-Document everything a developer (or AI) needs to get your project running from scratch. This context is invaluable for onboarding, deployment, and resuming work after time away.
-
-## 🎯 Essential Setup Information to Capture
-
-### Environment Setup
-- Virtual environment creation and activation
-- Package/dependency management
-- Environment variables and configuration
-- Database setup and migrations
-- Service dependencies (Redis, Docker, etc.)
-
-### Development Workflow
-- Build processes and commands
-- Testing procedures
-- Linting and formatting
-- Development server startup
-- Debugging setup
-
-### Deployment Considerations
-- Production environment differences
-- Environment-specific configurations
-- Deployment commands and procedures
-
-## 📋 Step-by-Step Context Assembly
-
-### 1. Virtual Environment Documentation
-
-#### For Python Projects:
-```
-## Virtual Environment Setup
-
-### Using venv (Python 3.3+)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\\Scripts\\activate
-pip install -r requirements.txt
-
-### Using conda
-conda create -n projectname python=3.11
-conda activate projectname
-pip install -r requirements.txt
-
-### Using uv (modern Python package manager)
-uv venv
-source .venv/bin/activate  # On Windows: .venv\\Scripts\\activate
-uv pip install -r requirements.txt
-
-### Development Dependencies
-pip install -r requirements-dev.txt  # If separate dev requirements
-```
-
-#### For Node.js Projects:
-```
-## Node Environment Setup
-
-### Using npm
-npm install
-npm run dev
-
-### Using yarn
-yarn install
-yarn dev
-
-### Using pnpm
-pnpm install
-pnpm dev
-
-### Node Version Management
-nvm use 18  # Or whatever version specified in .nvmrc
-```
-
-### 2. Configuration Documentation
-
-```
-## Environment Configuration
-
-### Required Environment Variables
-- DATABASE_URL: Connection string for main database
-- REDIS_URL: Redis connection for caching
-- API_KEY: Third-party service API key
-- DEBUG: Set to 'true' for development
-
-### Configuration Files
-- .env.example: Template for environment variables
-- config/settings.py: Main configuration module
-- docker-compose.yml: Local development services
-
-### Database Setup
-# First time setup
-python manage.py migrate
-python manage.py createsuperuser
-python manage.py loaddata fixtures/initial_data.json
-```
-
-### 3. Service Dependencies
-
-```
-## External Services
-
-### Database
-- PostgreSQL 14+ required
-- Create database: createdb projectname
-- Run migrations: python manage.py migrate
-
-### Cache/Queue
-- Redis for caching and background jobs
-- Start with Docker: docker run -d -p 6379:6379 redis
-
-### File Storage
-- AWS S3 for production
-- Local filesystem for development
-- Configure in settings based on environment
-```
-
-## 🛠️ Complete Setup Context Template
-
-```markdown
-# [Project Name] Setup Instructions
-
-## Quick Start
-[One-command setup if possible, e.g., make install && make run]
-
-## Prerequisites
-- Python 3.11+
-- PostgreSQL 14+
-- Redis 6+
-- Node.js 18+ (for frontend assets)
-
-## Environment Setup
-
-### 1. Clone and Navigate
-git clone [repository-url]
-cd [project-directory]
-
-### 2. Virtual Environment
-[Specific commands for your project]
-
-### 3. Dependencies
-[Installation commands]
-
-### 4. Configuration
-cp .env.example .env
-# Edit .env with your local settings
-
-### 5. Database
-[Database setup commands]
-
-### 6. Initial Data
-[Any seed data or initial setup]
-
-## Development Commands
-
-### Start Development Server
-[Command to start local server]
-
-### Run Tests
-[Test execution commands]
-
-### Database Operations
-[Migration, backup, restore commands]
-
-### Build/Deploy
-[Production build commands]
-
-## Troubleshooting
-
-### Common Issues
-- [Issue 1]: [Solution]
-- [Issue 2]: [Solution]
-
-### Port Conflicts
-[How to handle common port issues]
-
-### Permission Issues
-[Platform-specific permission fixes]
-
-## IDE/Editor Setup
-- [Recommended extensions]
-- [Debugger configuration]
-- [Code formatting setup]
-
-## Platform-Specific Notes
-
-### macOS
-[Any macOS-specific requirements]
-
-### Windows
-[Windows-specific setup steps]
-
-### Linux
-[Linux distribution considerations]
-```
-
-## 📝 Practical Examples
-
-### Example 1: Django Web Application
-```
-Key: "django-project-setup"
-Tags: ["setup", "django", "python", "environment", "database"]
-Priority: "high"
-
-Content should include:
-- Virtual environment with specific Python version
-- PostgreSQL database creation
-- Environment variables for Django settings
-- Static file collection
-- Migration commands
-- Superuser creation
-- Development server startup
-- Common troubleshooting steps
-```
-
-### Example 2: React + Node.js Full Stack
-```
-Key: "fullstack-dev-environment"
-Tags: ["setup", "react", "nodejs", "fullstack", "environment"]
-Priority: "high"
-
-Content should include:
-- Node version requirements
-- Package manager choice (npm/yarn/pnpm)
-- Environment variables for both frontend and backend
-- Database setup (if applicable)
-- Concurrent development server startup
-- Build process for production
-- Port configuration
-```
-
-### Example 3: Microservices with Docker
-```
-Key: "microservices-docker-setup"
-Tags: ["setup", "docker", "microservices", "environment"]
-Priority: "high"
-
-Content should include:
-- Docker and Docker Compose installation
-- Service orchestration with docker-compose
-- Environment variable management
-- Volume mounting for development
-- Log aggregation setup
-- Service health checks
-- Local vs production differences
-```
-
-## 🚀 Context Storage Best Practices
-
-### 1. Be Comprehensive but Concise
-- Include all necessary steps
-- Avoid overwhelming detail
-- Use clear, copy-pastable commands
-
-### 2. Test Your Instructions
-- Follow your own setup guide on a fresh machine
-- Update when processes change
-- Include timing expectations ("This step takes ~5 minutes")
-
-### 3. Include Troubleshooting
-- Document common error messages
-- Provide solutions for typical issues
-- Include platform-specific gotchas
-
-### 4. Version Information
-- Specify required versions for dependencies
-- Note when versions are critical vs flexible
-- Include upgrade/downgrade procedures
-
-### 5. Security Considerations
-- Never include actual secrets or API keys
-- Document which environment variables need real values
-- Include instructions for obtaining necessary credentials
-
-## 💡 Pro Tips for Setup Context
-
-1. **Start Fresh**: Test setup on a clean virtual machine or container
-2. **Time Stamp**: Note when instructions were last verified
-3. **Dependencies**: Document both direct and system dependencies
-4. **Alternatives**: Include multiple approaches when applicable (pip vs conda, etc.)
-5. **Automation**: Include any setup scripts or Makefiles
-6. **Rollback**: Document how to clean up or start over
-
-## 🔍 Using Setup Context
-
-### Store the Context
-```python
-await push_context(
-    key="project-setup-complete",
-    content=setup_instructions,
-    tags=["setup", "environment", "dependencies", "onboarding"],
-    priority="high"
-)
-```
-
-### Retrieve When Needed
-```python
-# Get setup instructions
-setup = await pop_context("project-setup-complete")
-
-# Find all setup-related contexts
-setups = await list_contexts(tag="setup")
-```
-
----
-
-**Remember**: Good setup documentation saves hours of debugging and enables quick project recovery. Update this context whenever your setup process changes!"""
-    
-    return setup_guide
 
 
 if __name__ == "__main__":
